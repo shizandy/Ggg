@@ -232,22 +232,32 @@ async function connectToWA(sessionId = 'main', isOwner = true, retryCount = 0) {
             
             if (!validationResult.success) {
               console.error(`Authentification échouée: ${validationResult.message}`);
-              console.error('Ce bot n\'est pas autorisé à s\'exécuter');
-              process.exit(1);
-            }
-            
-            console.log('Bot authentifié avec succès!');
-            if (validationResult.expiresAt) {
-              console.log(`L'autorisation expire le: ${new Date(validationResult.expiresAt).toLocaleString()}`);
+              
+              // Vérifier si nous avons une autorisation locale basée sur une approbation précédente
+              if (validationResult.local) {
+                console.log('Autorisation locale basée sur l\'approbation précédente');
+              } else {
+                console.error('Ce bot n\'est pas autorisé à s\'exécuter');
+                process.exit(1);
+              }
+            } else {
+              console.log('Bot authentifié avec succès!');
+              if (validationResult.expiresAt) {
+                console.log(`L'autorisation expire le: ${new Date(validationResult.expiresAt).toLocaleString()}`);
+              }
             }
             
             // Configuration de validation périodique
             setInterval(async () => {
-              console.log('Vérification périodique de l\'autorisation...');
-              const checkResult = await auth.validate();
-              if (!checkResult.success) {
-                console.error(`Autorisation révoquée: ${checkResult.message}`);
-                process.exit(1);
+              try {
+                console.log('Vérification périodique de l\'autorisation...');
+                const checkResult = await auth.validate();
+                if (!checkResult.success && !checkResult.local) {
+                  console.error(`Autorisation révoquée: ${checkResult.message}`);
+                  process.exit(1);
+                }
+              } catch (error) {
+                console.error("Erreur lors de la vérification périodique:", error.message);
               }
             }, 30 * 60 * 1000); // Vérification toutes les 30 minutes
           } catch (error) {
@@ -415,7 +425,7 @@ async function connectToWA(sessionId = 'main', isOwner = true, retryCount = 0) {
 
         const m = sms(conn, mek);
         const quoted = type == 'extendedTextMessage' && mek.message.extendedTextMessage.contextInfo != null ? mek.message.extendedTextMessage.contextInfo.quotedMessage || [] : [];
-        const body = (type === 'conversation') ? mek.message.conversation : (type === 'extendedTextMessage') ? mek.message.extendedTextMessage.text : (type == 'imageMessage') && mek.message.imageMessage.caption ? mek.message.imageMessage.caption : (type == 'videoMessage') && mek.message.videoMessage.caption ? mek.message.videoMessage.caption : (type == 'documentMessage') && mek.message.documentMessage.caption ? mek.message.documentMessage.caption : (type == 'buttonsResponseMessage') && mek.message.buttonsResponseMessage.selectedButtonId ? mek.message.buttonsResponseMessage.selectedButtonId : (type == 'templateButtonReplyMessage') && mek.message.templateButtonReplyMessage.selectedId ? mek.message.templateButtonReplyMessage.selectedId : (type == 'listResponseMessage') && mek.message.listResponseMessage.singleSelectReply.selectedRowId ? mek.message.listResponseMessage.singleSelectReply.selectedRowId : "";
+        const body = (type === 'conversation') ? mek.message.conversation : (type === 'extendedTextMessage') ? mek.message.extendedTextMessage.text : (type == 'imageMessage') && mek.message.imageMessage.caption ? mek.message.imageMessage.caption : (type == 'videoMessage') && mek.message.videoMessage.caption ? mek.message.videoMessage.caption : (type == 'documentMessage') && mek.message.documentMessage.caption ? mek.message.documentMessage.caption : (type == 'buttonsResponseMessage') ? mek.message.buttonsResponseMessage.selectedButtonId : (type == 'listResponseMessage') ? mek.message.listResponseMessage.singleSelectReply.selectedRowId : (type == 'templateButtonReplyMessage') ? mek.message.templateButtonReplyMessage.selectedId : (type == 'messageContextInfo') ? (mek.message.listResponseMessage.singleSelectReply.selectedRowId || mek.message.buttonsResponseMessage.selectedButtonId || mek.text) : '';
         const isCmd = body.startsWith(prefix);
         const command = isCmd ? body.slice(prefix.length).trim().split(' ').shift().toLowerCase() : '';
         const args = body.trim().split(/ +/).slice(1);
